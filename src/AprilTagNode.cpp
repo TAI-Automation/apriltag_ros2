@@ -211,7 +211,6 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
         msg_detection.centre.y = det->c[1];
         std::memcpy(msg_detection.corners.data(), det->p, sizeof(double) * 8);
         std::memcpy(msg_detection.homography.data(), det->H->data, sizeof(double) * 9);
-        msg_detections.detections.push_back(msg_detection);
 
         // 3D orientation and position
         geometry_msgs::msg::TransformStamped tf;
@@ -220,6 +219,14 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
         tf.child_frame_id = tag_frames.count(det->id) ? tag_frames.at(det->id) : std::string(det->family->name) + ":" + std::to_string(det->id);
         const double size = tag_sizes.count(det->id) ? tag_sizes.at(det->id) : tag_edge_size;
         tf.transform = estimate_pose(det, P, size);
+        msg_detection.tag_transform.transform.translation.x = tf.transform.translation.x;
+        msg_detection.tag_transform.transform.translation.y = tf.transform.translation.y;
+        msg_detection.tag_transform.transform.translation.z = tf.transform.translation.z;
+        msg_detection.tag_transform.transform.rotation.w = tf.transform.rotation.w; 
+        msg_detection.tag_transform.transform.rotation.x = tf.transform.rotation.x; 
+        msg_detection.tag_transform.transform.rotation.y = tf.transform.rotation.y; 
+        msg_detection.tag_transform.transform.rotation.z = tf.transform.rotation.z; 
+        msg_detections.detections.push_back(msg_detection);
 
         tfs.push_back(tf);
     }
