@@ -2,6 +2,8 @@
 #include "homography_to_pose.hpp"
 #include <apriltag_msgs/msg/april_tag_detection.hpp>
 #include <apriltag_msgs/msg/april_tag_detection_array.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #ifdef cv_bridge_HPP
 #include <cv_bridge/cv_bridge.hpp>
 #else
@@ -86,6 +88,10 @@ private:
 
     const image_transport::CameraSubscriber sub_cam;
     const rclcpp::Publisher<apriltag_msgs::msg::AprilTagDetectionArray>::SharedPtr pub_detections;
+    // rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr publisher_;
+    // const rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr draw_detections;
+    rmw_qos_profile_t custom_qos = rmw_qos_profile_default;
+    image_transport::Publisher draw_detections_pub;
     tf2_ros::TransformBroadcaster tf_broadcaster;
 
     estim_pose_f estimate_pose;
@@ -106,6 +112,7 @@ AprilTagNode::AprilTagNode(const rclcpp::NodeOptions& options)
     // topics
     sub_cam(image_transport::create_camera_subscription(this, "image_rect", std::bind(&AprilTagNode::onCamera, this, std::placeholders::_1, std::placeholders::_2), declare_parameter("image_transport", "raw", descr({}, true)), rmw_qos_profile_sensor_data)),
     pub_detections(create_publisher<apriltag_msgs::msg::AprilTagDetectionArray>("detections", rclcpp::QoS(1))),
+    draw_detections_pub(image_transport::create_publisher(this, "tag_detections_image",custom_qos)),
     tf_broadcaster(this)
 {
     // read-only parameters
@@ -186,6 +193,19 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
 
     std::vector<geometry_msgs::msg::TransformStamped> tfs;
 
+    // MAKE A CV2 IMAGE TO DRAW DETECTIONS
+
+    cv_bridge::CvImagePtr cv_ptr;
+    try
+    {
+        cv_ptr = cv_bridge::toCvCopy(msg_img, msg_img->encoding);
+    }
+    catch (cv_bridge::Exception& e)
+    {
+        RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
+        return;
+    }
+
     for(int i = 0; i < zarray_size(detections); i++) {
         apriltag_detection_t* det;
         zarray_get(detections, i, &det);
@@ -229,8 +249,23 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
         msg_detections.detections.push_back(msg_detection);
 
         tfs.push_back(tf);
+
+        // DRAW the tag detections 
+        line(cv_ptr->image, cv::Point((int)det->p[0][0], (int)det->p[0][1]),
+            cv::Point((int)det->p[1][0], (int)det->p[1][1]),
+            cv::Scalar(255, 0, 0),2);
+        line(cv_ptr->image, cv::Point((int)det->p[0][0], (int)det->p[0][1]),
+            cv::Point((int)det->p[3][0], (int)det->p[3][1]),
+            cv::Scalar(255, 0, 0),2);
+        line(cv_ptr->image, cv::Point((int)det->p[1][0], (int)det->p[1][1]),
+            cv::Point((int)det->p[2][0], (int)det->p[2][1]),
+            cv::Scalar(255, 0, 0),2);
+        line(cv_ptr->image, cv::Point((int)det->p[2][0], (int)det->p[2][1]),
+            cv::Point((int)det->p[3][0], (int)det->p[3][1]),
+            cv::Scalar(255, 0, 0),2);
     }
 
+    draw_detections_pub.publish(cv_ptr->toImageMsg());
     pub_detections->publish(msg_detections);
     tf_broadcaster.sendTransform(tfs);
 
