@@ -113,7 +113,10 @@ AprilTagNode::AprilTagNode(const rclcpp::NodeOptions& options)
 #endif
     },
     pub_detections(create_publisher<apriltag_msgs::msg::AprilTagDetectionArray>("detections", rclcpp::QoS(1))),
-    tf_broadcaster(this)
+    tf_broadcaster( rclcpp::node_interfaces::NodeInterfaces<
+        rclcpp::node_interfaces::NodeParametersInterface,
+        rclcpp::node_interfaces::NodeTopicsInterface
+      >(*this))
 {
     // read-only parameters
     const std::string tag_family = declare_parameter("family", "36h11", descr("tag family", true));
@@ -249,8 +252,7 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
             const double size = tag_sizes.count(det->id) ? tag_sizes.at(det->id) : tag_edge_size;
             tf.transform = estimate_pose(det, intrinsics, size);
             tfs.push_back(tf);
-        }
-        msg_detection.tag_transform.transform.translation.x = tf.transform.translation.x;
+                    msg_detection.tag_transform.transform.translation.x = tf.transform.translation.x;
         msg_detection.tag_transform.transform.translation.y = tf.transform.translation.y;
         msg_detection.tag_transform.transform.translation.z = tf.transform.translation.z;
         msg_detection.tag_transform.transform.rotation.w = tf.transform.rotation.w; 
@@ -259,7 +261,8 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
         msg_detection.tag_transform.transform.rotation.z = tf.transform.rotation.z; 
         msg_detections.detections.push_back(msg_detection);
 
-        tfs.push_back(tf);
+        }
+
     }
 
     pub_detections->publish(msg_detections);
